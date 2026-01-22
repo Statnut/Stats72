@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hockey Stats – Rosters Stable</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body { font-family:-apple-system,BlinkMacSystemFont,sans-serif; margin:0 }
+header { background:#111; color:#fff; padding:12px; text-align:center }
+nav { display:flex; background:#eee }
+nav button { flex:1; padding:12px; border:none; background:#eee; font-size:16px }
+nav button.active { background:#ddd; font-weight:bold }
+section { display:none; padding:16px }
+section.active { display:block }
+.box { border:1px solid #ccc; padding:12px; margin-bottom:12px }
+input, select, button { margin:4px 0; padding:6px; font-size:15px }
+label { display:block; margin-top:6px }
+ul { padding-left:18px }
+.player { margin-bottom:6px }
+.small { font-size:13px; opacity:.8 }
+hr { margin:10px 0 }
+</style>
+</head>
+
+<body>
+
+<header>
+  <h2>Hockey Stats – Stable Rosters</h2>
+</header>
+
+<nav>
+  <button data-tab="seasons" class="active">Seasons</button>
+  <button data-tab="teams">Teams</button>
+</nav>
+
+<!-- SEASONS -->
+<section id="seasons" class="active">
+  <h3>Seasons</h3>
+
+  <input id="seasonName" placeholder="e.g. 2025–26">
+  <button id="addSeason">Add Season</button>
+
+  <div class="box">
+    <label>Active Season</label>
+    <select id="seasonSelect"></select>
+  </div>
+
+  <div class="box">
+    <h4>Teams in Season</h4>
+    <div id="seasonTeams"></div>
+  </div>
+
+  <div class="box">
+    <button id="deleteSeason">Delete Selected Season</button>
+  </div>
+</section>
+
+<!-- TEAMS -->
+<section id="teams">
+  <h3>Teams & Rosters</h3>
+
+  <div class="box">
+    <input id="teamName" placeholder="Team name">
+    <button id="addTeam">Add Team</button>
+  </div>
+
+  <div id="teamList"></div>
+</section>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+const LS = localStorage;
+
+/* ---------- STATE ---------- */
+let seasons = JSON.parse(LS.getItem("seasons")) || [];
+let teams   = JSON.parse(LS.getItem("teams")) || [];
+let activeSeasonId = LS.getItem("activeSeasonId") || "";
+
+/* ---------- ELEMENTS ---------- */
+const tabs = document.querySelectorAll("nav button");
+const sections = document.querySelectorAll("section");
+const seasonSelect = document.getElementById("seasonSelect");
+const seasonTeams = document.getElementById("seasonTeams");
+
+/* ---------- TABS ---------- */
+tabs.forEach(btn=>{
+  btn.onclick=()=>{
+    tabs.forEach(b=>b.classList.remove("active"));
+    sections.forEach(s=>s.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(btn.dataset.tab).classList.add("active");
+  };
+});
+
+/* ---------- HELPERS ---------- */
+function getSeasonById(id){
+  return seasons.find(s=>s.id===id);
+}
+
+/* ---------- SEASONS ---------- */
+function renderSeasonSelect(){
+  seasonSelect.innerHTML="";
+  const blank=document.createElement("option");
+  blank.value="";
+  blank.textContent="Select season";
+  seasonSelect.appendChild(blank);
+
+  seasons.forEach(s=>{
+    const o=document.createElement("option");
+    o.value=s.id;
+    o.textContent=s.name;
+    seasonSelect.appendChild(o);
+  });
+
+  if(seasons.some(s=>s.id===activeSeasonId)){
+    seasonSelect.value=activeSeasonId;
+  } else {
+    activeSeasonId = seasons[0]?.id || "";
+    seasonSelect.value=activeSeasonId;
+    LS.setItem("activeSeasonId",activeSeasonId);
+  }
+}
+
+function renderSeasonTeams(){
+  seasonTeams.innerHTML="";
+  const season=getSeasonById(activeSeasonId);
+  if(!season){
+    seasonTeams.innerHTML="<em>Select a season</em>";
+    return;
+  }
+
+  teams.forEach(t=>{
+    const label=document.createElement("label");
+    const cb=document.createElement("input");
+    cb.type="checkbox";
+    cb.checked=season.teamIds.includes(t.id);
+    cb.onchange=()=>{
+      if(cb.checked){
+        if(!season.teamIds.includes(t.id)) season.teamIds.push(t.id);
+      } else {
+        season.teamIds=season.teamIds.filter(id=>id!==t.id);
+      }
+      LS.setItem("seasons",JSON.stringify(seasons));
+    };
+    label.appendChild(cb);
+    label.append(" "+t.name);
+    seasonTeams.appendChild(label);
+  });
+}
+
+document.getElementById("addSeason").onclick=()=>{
+  const name=document.getElementById("seasonName").value.trim();
+  if(!name) return;
+  const id=crypto.randomUUID();
+  seasons.push({id,name,teamIds:[]});
+  activeSeasonId=id;
+  LS.setItem("seasons",JSON.stringify(seasons));
+  LS.setItem("activeSeasonId",activeSeasonId);
+  document.getElementById("seasonName").value="";
+  renderSeasonSelect();
+  renderSeasonTeams();
+};
+
+seasonSelect.onchange=()=>{
+  activeSeasonId=seasonSelect.value;
+  LS.setItem("activeSeasonId",activeSeasonId);
+  renderSeasonTeams();
+};
+
+document.getElementById("deleteSeason").onclick=()=>{
+  if(!activeSeasonId) return;
+  seasons = seasons.filter(s=>s.id!==activeSeasonId);
+  LS.setItem("seasons",JSON.stringify(seasons));
+  activeSeasonId = seasons[0]?.id || "";
+  LS.setItem("activeSeasonId",activeSeasonId);
+  renderSeasonSelect();
+  renderSeasonTeams();
+};
+
+/* ---------- TEAMS & ROSTERS ---------- */
+function renderTeams(){
+  const list=document.getElementById("teamList");
+  list.innerHTML="";
+
+  teams.forEach(team=>{
+    const div=document.createElement("div");
+    div.className="box";
+    div.innerHTML=`
+      <b>${team.name}</b>
+      <button class="deleteTeam">Delete Team</button>
+      <hr>
+      <input class="pName" placeholder="Name">
+      <input class="pNum" placeholder="#" style="width:50px">
+      <select class="pPos">
+        <option>F</option><option>D</option><option>C</option>
+        <option>LW</option><option>RW</option><option>G</option>
+      </select>
+      <label><input type="checkbox" class="pGoalie"> Goalie</label>
+      <button class="addPlayer">Add Player</button>
+      <ul class="roster"></ul>
+    `;
+
+    div.querySelector(".deleteTeam").onclick=()=>{
+      const teamId=team.id;
+      teams = teams.filter(t=>t.id!==teamId);
+      seasons.forEach(s=>s.teamIds=s.teamIds.filter(id=>id!==teamId));
+      LS.setItem("teams",JSON.stringify(teams));
+      LS.setItem("seasons",JSON.stringify(seasons));
+      renderTeams();
+      renderSeasonTeams();
+    };
+
+    const rosterUl=div.querySelector(".roster");
+    team.roster?.forEach((p,i)=>{
+      const li=document.createElement("li");
+      li.innerHTML=`
+        <input value="${p.name}">
+        <input value="${p.num}" style="width:50px">
+        <select>
+          <option ${p.position==="F"?"selected":""}>F</option>
+          <option ${p.position==="D"?"selected":""}>D</option>
+          <option ${p.position==="C"?"selected":""}>C</option>
+          <option ${p.position==="LW"?"selected":""}>LW</option>
+          <option ${p.position==="RW"?"selected":""}>RW</option>
+          <option ${p.position==="G"?"selected":""}>G</option>
+        </select>
+        <label class="small"><input type="checkbox" ${p.goalie?"checked":""}> Goalie</label>
+        <button>x</button>
+      `;
+      const inputs=li.querySelectorAll("input,select,button");
+      inputs[0].oninput=()=>{p.name=inputs[0].value; LS.setItem("teams",JSON.stringify(teams));};
+      inputs[1].oninput=()=>{p.num=inputs[1].value; LS.setItem("teams",JSON.stringify(teams));};
+      inputs[2].onchange=()=>{p.position=inputs[2].value; LS.setItem("teams",JSON.stringify(teams));};
+      inputs[3].onchange=()=>{p.goalie=inputs[3].checked; LS.setItem("teams",JSON.stringify(teams));};
+      inputs[4].onclick=()=>{team.roster.splice(i,1); LS.setItem("teams",JSON.stringify(teams)); renderTeams();};
+      rosterUl.appendChild(li);
+    });
+
+    div.querySelector(".addPlayer").onclick=()=>{
+      team.roster=team.roster||[];
+      team.roster.push({
+        name:div.querySelector(".pName").value,
+        num:div.querySelector(".pNum").value,
+        position:div.querySelector(".pPos").value,
+        goalie:div.querySelector(".pGoalie").checked
+      });
+      LS.setItem("teams",JSON.stringify(teams));
+      renderTeams();
+    };
+
+    list.appendChild(div);
+  });
+}
+
+document.getElementById("addTeam").onclick=()=>{
+  const name=document.getElementById("teamName").value.trim();
+  if(!name) return;
+  teams.push({id:crypto.randomUUID(),name,roster:[]});
+  LS.setItem("teams",JSON.stringify(teams));
+  document.getElementById("teamName").value="";
+  renderTeams();
+  renderSeasonTeams();
+};
+
+/* ---------- INIT ---------- */
+renderSeasonSelect();
+renderSeasonTeams();
+renderTeams();
+
+});
+</script>
+
+</body>
+</html>
